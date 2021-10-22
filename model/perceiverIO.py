@@ -118,8 +118,8 @@ class CrossAttention(nn.Module):
         # Ne pas normaliser Xkv si C = 1 !
         # Xqkv = self.attn(self.norm_xq(Xq), Xkv)
         Xqkv = self.attn(self.norm_xq(queries), self.norm_xkv(keys_values))
-        if Xqkv.shape == Xq.shape:
-            Xqkv = Xqkv + Xq
+        if keys_values.shape == queries.shape:
+            Xqkv = Xqkv + queries
         Xqkv = Xqkv + self.mlp(self.norm_xqkv(Xqkv))
         return Xqkv
 
