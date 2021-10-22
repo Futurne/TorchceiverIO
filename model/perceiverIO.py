@@ -163,6 +163,7 @@ class PerceiverProcess(nn.Module):
 
 class PerceiverIO(nn.Module):
     """Perceiver IO class implementation."""
+
     def __init__(
         self,
         nlatents: int,
@@ -194,7 +195,7 @@ class PerceiverIO(nn.Module):
 
         self.encoder = CrossAttention(input_size,latent_size,project_size, nheads, dropout)
         self.process = PerceiverProcess(latent_size, nlayers, nheads, dim_feedforward=dim_feedforward, dropout=dropout)
-        self.decoder = CrossAttention(latent_size, output_dim, project_size, nheads, dropout, out_emb_size=out_emb_size)
+        self.decoder = CrossAttention(latent_size, output_dim, project_size, nheads, dropout, output_size=out_emb_size)
 
     def forward(self, x, query):
         """Forward."""
