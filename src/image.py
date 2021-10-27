@@ -1,26 +1,44 @@
-"""
-Defines PerceiverIO variant for images.
-"""
+"""Defines PerceiverIO variant for images."""
 import torch
 import torch.nn as nn
 
 import einops
 
-
 from .perceiverIO import PerceiverIO
 
 
 class PerceiverIOImage(PerceiverIO):
+    """Module built uppon PerceiverIO to defines some default behaviour with images.
+
+    Add a learnable positional encoding for all pixels.
+    Concatenate those embeddings to the RGB channels of the pixels.
+
+    Create a unique learnable decoder query token.
+    The token is unique, so this model should be used for classification.
+    """
     def __init__(
         self,
         im_size: int,
         decoder_query_size: int,
         pos_encoding_size: int,
-        input_size: int,
+        channel_size: int,
         **kwargs,
     ):
+        """
+        params:
+            - im_size: image length.
+                The image is supposed to be a square of shape [im_size, im_size].
+            - pos_encoding_size: Embedding dimension of the positional encodings.
+            - channel_size: Number of channel per pixel (3 for 'RGB').
+
+        The rest of the parameters are the same as the PerceiverIO.
+        Do not provide an `input_size` parameter.
+
+        Since the positional encodings are concatenated, the final `input_size`
+        for the PerceiverIO is `channel_size` + `pos_encoding_size`.
+        """
         super(PerceiverIOImage, self).__init__(
-            input_size=input_size + pos_encoding_size,
+            input_size=channel_size + pos_encoding_size,
             decoder_query_size=decoder_query_size,
             **kwargs
         )
@@ -34,9 +52,9 @@ class PerceiverIOImage(PerceiverIO):
     def forward(self, x) :
         """
         parms :
-            - x : image of shape [batch_size, 1, width, height]
+            - x : image of shape [batch_size, channel_size, width, height]
         returns :
-            - PerceiverIO prediction of size [batch_size, 1, num_class]
+            - PerceiverIO prediction of size [batch_size, output_size]
         """
         batch_size = x.shape[0]
         pos_encoding = einops.repeat(self.pos_encoding, 'i e -> b i e', b=batch_size)
