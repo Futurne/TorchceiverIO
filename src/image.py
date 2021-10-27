@@ -7,7 +7,7 @@ import torch.nn as nn
 import einops
 
 
-from src.perceiverIO import PerceiverIO
+from .perceiverIO import PerceiverIO
 
 
 class PerceiverIOImage(PerceiverIO):

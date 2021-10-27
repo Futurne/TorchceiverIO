@@ -7,7 +7,7 @@ import torch.nn as nn
 
 import einops
 
-from src.attention import CrossAttention
+from .attention import CrossAttention
 
 
 class PerceiverIO(nn.Module):
