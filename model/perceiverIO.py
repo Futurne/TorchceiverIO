@@ -199,4 +199,4 @@ class PerceiverIO(nn.Module):
 
         latent_tokens = self.encoder(latent_queries, input_tokens)
         latent_tokens = self.process(latent_tokens)
-        return self.decoder(decoder_queries, latent_queries)
+        return self.decoder(decoder_queries, latent_tokens)
