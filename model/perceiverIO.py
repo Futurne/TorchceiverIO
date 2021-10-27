@@ -25,7 +25,7 @@ class AttentionModule(nn.Module):
         output_size: int,
     ):
         """
-        params : 
+        params:
             - input_size: Embedding dimension of the input tokens (C).
             - latent_size: Embedding dimension of the latent tokens (D).
             - project_size : Project dimension for the keys and queries (F).
@@ -53,11 +53,11 @@ class AttentionModule(nn.Module):
         keys_values: torch.tensor,
     ):
         """
-        params
-            - queries: Query input of shape [N, D]
-            - keys_values: Key-value input of shape [M, C]
-        returns :
-            - output: key-value-query attention of shape [N,D] (encoder) or [O,E] (decoder)
+        params:
+            - queries: Query input of shape [batch_size, ntokens_query, latent_size].
+            - keys_values: Key-value input of shape [batch_size, ntokens, input_size].
+        returns:
+            - output: key-value-query attention of shape [batch_size, ntokens_query, output_size].
         """
         Q = self.project_queries(queries)
         K = self.project_keys(keys_values)
@@ -81,10 +81,10 @@ class CrossAttention(nn.Module):
         project_size: int,
         nheads: int,
         dropout: int,
-        output_size: Optional[int] = None
+        output_size: Optional[int] = None,
     ):
         """
-        params :
+        params:
             - input_size: Embedding dimension of the input tokens (C).
             - latent_size: Embedding dimension of the latent tokens (D).
             - project_size : Project dimension for the keys and queries (F).
@@ -109,11 +109,11 @@ class CrossAttention(nn.Module):
 
     def forward(self, queries, keys_values):
         """
-        params :
-            - queries: Query input of shape [N, D]
-            - keys_values: Key-value input of shape [M, C]
-        returns :
-            - output : key-value-query attention of shape [N,D] (encoder) or [O,E] (decoder)
+        params:
+            - queries: Query input of shape [batch_size, ntokens_query, latent_size].
+            - keys_values: Key-value input of shape [batch_size, ntokens, input_size].
+        returns:
+            - output : key-value-query attention of shape [batch_size, ntokens_query, output_size].
         """
         # Ne pas normaliser Xkv si C = 1 !
         # Xqkv = self.attn(self.norm_xq(Xq), Xkv)
@@ -124,25 +124,50 @@ class CrossAttention(nn.Module):
         return Xqkv
 
 
-class PerceiverProcess(nn.Module):
-    """Perceiver Process class."""
+class PerceiverIO(nn.Module):
+    """Main PerceiverIO module.
+
+    Encapsulate the encoder, process and decoder modules.
+    """
+
     def __init__(
         self,
-        latent_size: int,
-        nlayers: int,
-        nhead: int,
+        nlatents: int,  # N
+        input_size: int,  # C
+        project_size: int,  # F
+        latent_size: int,  # D
+        output_size: int,  # E
+        nlayers: int,  # L
+        decoder_query_size: int,  # O
+        nheads: int,
         dim_feedforward: int,
         dropout: int,
     ):
         """
-        Args:
+        params:
+            - nlatents: Number of latent tokens (N).
+            - input_size: Embedding dimension of the input tokens (C).
+            - project_size: Project dimension for the keys and queries (F).
             - latent_size: Embedding dimension of the latent tokens (D).
-            - nlayers: Number of transformer encoder's layers (L).
-            - nhead, dim_feedforward, dropout: Parameters of the `nn.TransformerEncoderLayer`.
+            - output_size: Output embedding dimension (E).
+            - nlayers: Number of transformer process's layers (L).
+            - decoder_query_size: Dimension of the output query (O).
+            - nheads, dim_feedforward, dropout: Parameters of the `nn.TransformerEncoderLayer`.
         """
         super().__init__()
+        self.latent_array = nn.Parameter(torch.randn(nlatents, latent_size))
+        nn.init.xavier_uniform_(self.latent_array)
+
+        self.encoder = CrossAttention(
+            input_size,
+            latent_size,
+            project_size,
+            nheads,
+            dropout
+        )
+
         encoder_layer = nn.TransformerEncoderLayer(
-            d_model = latent_size,
+            d_model=latent_size,
             nhead=nhead,
             dim_feedforward=dim_feedforward,
             dropout=dropout,
@@ -150,59 +175,28 @@ class PerceiverProcess(nn.Module):
         )
         self.process = nn.TransformerEncoder(encoder_layer, nlayers)
 
-    def forward(self, x, src_key_padding_mask=None):
+        self.decoder = CrossAttention(
+            latent_size,
+            decoder_query_size,
+            project_size,
+            nheads,
+            dropout,
+            output_size=output_size
+        )
+
+    def forward(self, input_tokens, decoder_queries):
+        """Project `input_tokens` to the latent embedding,
+        and decode those embeddings with the `decoder_queries`.
+
+        params:
+            - input_tokens: input tokens of shape [batch_size, ntokens_input, input_size].
+            - decoder_queries: decoder queries of shape [batch_size, ntokens_output, decoder_query_size].
+        returns:
+            - output: PerceiverIO's output of shape [batch_size, ntokens_output, output_size].
         """
-        Args
-            - x: Latent array of shape [batch_size, seq_len, latent_size].
-        Return
-            - self_attention: Over x.
-                Output shape is [batch_size, seq_len, latent_size].
-        """
-        return self.process(x, src_key_padding_mask=src_key_padding_mask)
+        batch_size = input_tokens.shape[0]
+        latent_queries = einops.repeat(self.latent_array, 's d -> b s d', b=batch_size)
 
-
-class PerceiverIO(nn.Module):
-    """Perceiver IO class implementation."""
-
-    def __init__(
-        self,
-        nlatents: int,
-        input_size: int,
-        project_size: int,
-        latent_size: int,
-        out_emb_size: int,
-        nlayers: int,
-        output_dim: int,
-        nheads: int,
-        dim_feedforward: int,
-        dropout: int,
-    ):
-        """
-        params :
-            - nlatents: Number of latent tokens (N).
-            - input_size: Embedding dimension of the input tokens (C).
-            - project_size : Project dimension for the keys and queries (F).
-            - latent_size: Embedding dimension of the latent tokens (D).
-            - out_emb_size : Output embedding dimension (E). Default to None for the Encoder.
-            - nlayers: Number of transformer encoder's layers (L).
-            - output_dim: Dimension of output query (O).
-            - nhead, dim_feedforward, dropout: Parameters of the `nn.TransformerEncoderLayer`.
-        """
-
-        super().__init__()
-        self.latent_array = nn.Parameter(torch.randn(nlatents, latent_size))
-        nn.init.xavier_uniform_(self.latent_array)
-
-        self.encoder = CrossAttention(input_size,latent_size,project_size, nheads, dropout)
-        self.process = PerceiverProcess(latent_size, nlayers, nheads, dim_feedforward=dim_feedforward, dropout=dropout)
-        self.decoder = CrossAttention(latent_size, output_dim, project_size, nheads, dropout, output_size=out_emb_size)
-
-    def forward(self, x, query):
-        """Forward."""
-        batch_size = x.shape[0]
-        Xq = einops.repeat(self.latent_array, 's d -> b s d', b=batch_size)
-
-        x = self.encoder(Xq, x)
-        x = self.process(x)
-        x = self.decoder(query, x)
-        return x
+        latent_tokens = self.encoder(latent_queries, input_tokens)
+        latent_tokens = self.process(latent_tokens)
+        return self.decoder(decoder_queries, latent_queries)
