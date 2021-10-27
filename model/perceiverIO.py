@@ -29,7 +29,7 @@ class AttentionModule(nn.Module):
             - input_size: Embedding dimension of the input tokens (C).
             - latent_size: Embedding dimension of the latent tokens (D).
             - project_size : Project dimension for the keys and queries (F).
-            - nhead, dropout: Parameters of the `nn.MultiheadAttention`.
+            - nheads, dropout: Parameters of the `nn.MultiheadAttention`.
             - output_size : Output embedding dimension (E).
         """
         super().__init__()
@@ -168,7 +168,7 @@ class PerceiverIO(nn.Module):
 
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=latent_size,
-            nhead=nhead,
+            nhead=nheads,
             dim_feedforward=dim_feedforward,
             dropout=dropout,
             batch_first=True,
